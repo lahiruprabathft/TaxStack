@@ -128,6 +128,99 @@ export function formatAmount(value: number, decimals: number): string {
   });
 }
 
+/**
+ * The exact effective rate of each tax against the net base, independent of
+ * the base amount itself — every tax's amount is a fixed proportion of the
+ * net base regardless of scale, so this is found once by running the
+ * cascade against a unit base (1) at full precision.
+ */
+function exactEffectiveRatios(taxes: TaxType[]): Map<string, number> {
+  const unit = buildForward(1, taxes, Infinity);
+  const ratios = new Map<string, number>();
+  for (const line of unit.lines) {
+    ratios.set(line.tax.id, line.taxAmount);
+  }
+  return ratios;
+}
+
+/**
+ * "ERP flat-rate" mode: mirrors how a real tax engine that can't natively
+ * cascade tax-on-tax is actually configured in practice. Instead of
+ * re-deriving each tax's base from the running total every time, you
+ * calculate the true effective rate once (exactly, via the cascade), round
+ * *that percentage* to the working precision, and from then on treat every
+ * exclusive tax as an independent flat percentage of the net base — the
+ * same shortcut you'd type into an ERP tax-configuration screen.
+ *
+ * This deliberately reproduces the small drift against the exact cascade
+ * that comes from rounding the rate itself before reusing it, since that's
+ * the real-world source of the mismatch this mode exists to match.
+ */
+function flatRatesFromCascade(taxes: TaxType[], decimals: number): Map<string, number> {
+  const exact = exactEffectiveRatios(taxes);
+  const flat = new Map<string, number>();
+  for (const tax of taxes) {
+    const exactRatio = exact.get(tax.id) ?? 0;
+    // Round the *percentage*, then convert back to a ratio, e.g. 2.8160% at
+    // 4 decimals — this is what actually gets typed into an ERP field.
+    const roundedPercent = roundTo(exactRatio * 100, decimals);
+    flat.set(tax.id, roundedPercent / 100);
+  }
+  return flat;
+}
+
+/** Build-direction calculation using flat, pre-rounded effective rates instead of re-cascading bases. */
+export function buildForwardFlat(netBase: number, taxes: TaxType[], decimals: number): CalculationResult {
+  const ordered = sortedTaxes(taxes);
+  const flatRates = flatRatesFromCascade(ordered, decimals);
+  const round = (v: number) => roundTo(v, decimals);
+
+  let runningTotal = round(netBase);
+  let totalExclusiveTax = 0;
+  let totalInclusiveTax = 0;
+  const lines: CalculatedLine[] = [];
+
+  for (const tax of ordered) {
+    const ratio = flatRates.get(tax.id) ?? 0;
+    const taxAmount = round(netBase * ratio);
+
+    if (tax.mode === "exclusive") {
+      runningTotal = round(runningTotal + taxAmount);
+      totalExclusiveTax = round(totalExclusiveTax + taxAmount);
+    } else {
+      totalInclusiveTax = round(totalInclusiveTax + taxAmount);
+    }
+
+    lines.push({
+      tax,
+      baseAmount: round(netBase),
+      taxAmount,
+      effectiveRateOnNet: roundTo(ratio * 100, decimals),
+      runningTotal,
+    });
+  }
+
+  return { netBase: round(netBase), finalTotal: runningTotal, lines, totalExclusiveTax, totalInclusiveTax };
+}
+
+/**
+ * Extract-direction calculation for ERP flat-rate mode: sums the rounded
+ * flat percentages of every exclusive tax and solves the net base directly
+ * — exactly the `Base = Gross / (1 + sum of flat rates)` shortcut a
+ * non-cascading ERP uses, rounding drift and all.
+ */
+export function extractFromGrossFlat(grossTotal: number, taxes: TaxType[], decimals: number): CalculationResult {
+  const ordered = sortedTaxes(taxes);
+  const flatRates = flatRatesFromCascade(ordered, decimals);
+
+  const sumExclusive = ordered
+    .filter((t) => t.mode === "exclusive")
+    .reduce((sum, t) => sum + (flatRates.get(t.id) ?? 0), 0);
+
+  const netBase = sumExclusive > -1 ? grossTotal / (1 + sumExclusive) : grossTotal;
+  return buildForwardFlat(netBase, ordered, decimals);
+}
+
 let counter = 0;
 export function makeTaxId(): string {
   counter += 1;

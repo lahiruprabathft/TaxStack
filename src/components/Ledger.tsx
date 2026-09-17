@@ -6,24 +6,34 @@ interface Props {
   decimals: number;
   direction: Direction;
   currencySymbol: string;
+  erpMode: boolean;
 }
 
-export default function Ledger({ result, decimals, direction, currencySymbol }: Props) {
+export default function Ledger({ result, decimals, direction, currencySymbol, erpMode }: Props) {
   const fmt = (v: number) => `${currencySymbol}${formatAmount(v, decimals)}`;
 
   return (
     <div className="rounded-xl border border-ink-700 bg-ink-800/40">
       <div className="border-b border-ink-700 px-4 py-3">
-        <h2 className="text-sm font-semibold text-ink-100">Calculation Ledger</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-ink-100">Calculation Ledger</h2>
+          {erpMode && (
+            <span className="rounded-full border border-gold-500 bg-gold-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-gold-400">
+              ERP flat-rate
+            </span>
+          )}
+        </div>
         <p className="mt-0.5 text-xs text-ink-400">
-          {direction === "build"
+          {erpMode
+            ? "Rounded effective rates applied as independent flat percentages, the way a non-cascading ERP tax engine would."
+            : direction === "build"
             ? "Building up from the net base to the final total."
             : "Net base solved backward from the final total you entered."}
         </p>
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[600px] text-sm">
           <thead>
             <tr className="border-b border-ink-700 text-left text-xs uppercase tracking-wide text-ink-400">
               <th className="px-4 py-2 font-medium">#</th>
@@ -110,10 +120,24 @@ export default function Ledger({ result, decimals, direction, currencySymbol }: 
 
       {direction === "extract" && (
         <p className="border-t border-ink-700 px-4 py-2.5 text-xs text-ink-500">
-          Solved by working backward from your entered final total. Per-line rounding at{" "}
-          {decimals} decimal{decimals === 1 ? "" : "s"} means the recomputed final total above can differ
-          from what you typed by a fraction of a unit — that drift is real and is exactly what your ERP
-          will also produce.
+          {erpMode ? (
+            <>
+              Solved as{" "}
+              <span className="tabular text-ink-300">
+                Base = Gross / (1 + sum of rounded flat rates)
+              </span>
+              , the same shortcut a non-cascading ERP uses. The recomputed final total above can differ
+              from what you typed by a fraction of a unit — that's the real rounding drift baked into
+              using a {decimals}-decimal flat percentage instead of the exact cascade.
+            </>
+          ) : (
+            <>
+              Solved by working backward from your entered final total. Per-line rounding at {decimals}{" "}
+              decimal{decimals === 1 ? "" : "s"} means the recomputed final total above can differ from
+              what you typed by a fraction of a unit — that drift is real and is exactly what your ERP
+              will also produce.
+            </>
+          )}
         </p>
       )}
     </div>

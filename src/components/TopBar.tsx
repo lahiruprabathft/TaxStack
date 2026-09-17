@@ -14,6 +14,8 @@ interface Props {
   onExportXLSX: () => void;
   onImportFile: (file: File) => void;
   onLoadSample: () => void;
+  erpMode: boolean;
+  onErpModeChange: (v: boolean) => void;
 }
 
 export default function TopBar({
@@ -29,6 +31,8 @@ export default function TopBar({
   onExportXLSX,
   onImportFile,
   onLoadSample,
+  erpMode,
+  onErpModeChange,
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -106,6 +110,23 @@ export default function TopBar({
               ))}
             </select>
           </div>
+
+          <label
+            className={`flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+              erpMode
+                ? "border-gold-500 bg-gold-500/15 text-gold-400"
+                : "border-ink-600 text-ink-300 hover:border-ink-500"
+            }`}
+            title="Round each effective rate to the decimals above and apply it as an independent flat percentage, matching a non-cascading ERP tax engine — instead of re-cascading exact bases."
+          >
+            <input
+              type="checkbox"
+              checked={erpMode}
+              onChange={(e) => onErpModeChange(e.target.checked)}
+              className="hidden"
+            />
+            ERP flat-rate mode
+          </label>
 
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <button

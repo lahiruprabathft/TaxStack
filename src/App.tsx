@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Direction, TaxType } from "./types";
-import { buildForward, extractFromGross } from "./calc";
+import { buildForward, buildForwardFlat, extractFromGross, extractFromGrossFlat } from "./calc";
 import { sampleTaxes } from "./sampleData";
 import { fromCSV, fromXLSX, toCSV, toXLSXBlob, downloadBlob } from "./utils/csv";
 import TopBar from "./components/TopBar";
@@ -13,13 +13,19 @@ export default function App() {
   const [amount, setAmount] = useState<number>(100000);
   const [decimals, setDecimals] = useState<number>(2);
   const [currencySymbol, setCurrencySymbol] = useState<string>("Rs.");
+  const [erpMode, setErpMode] = useState<boolean>(false);
   const [importError, setImportError] = useState<string | null>(null);
 
   const result = useMemo(() => {
+    if (erpMode) {
+      return direction === "build"
+        ? buildForwardFlat(amount, taxes, decimals)
+        : extractFromGrossFlat(amount, taxes, decimals);
+    }
     return direction === "build"
       ? buildForward(amount, taxes, decimals)
       : extractFromGross(amount, taxes, decimals);
-  }, [direction, amount, taxes, decimals]);
+  }, [direction, amount, taxes, decimals, erpMode]);
 
   const handleImportFile = async (file: File) => {
     setImportError(null);
@@ -48,6 +54,8 @@ export default function App() {
         onDecimalsChange={setDecimals}
         currencySymbol={currencySymbol}
         onCurrencyChange={setCurrencySymbol}
+        erpMode={erpMode}
+        onErpModeChange={setErpMode}
         onExportCSV={() =>
           downloadBlob(
             new Blob([toCSV(taxes, { result, direction, decimals, currencySymbol })], { type: "text/csv" }),
@@ -63,7 +71,7 @@ export default function App() {
         onLoadSample={() => setTaxes(sampleTaxes())}
       />
 
-      <main className="mx-auto max-w-[1600px]  space-y-6 px-4 py-6 sm:px-6">
+      <main className="mx-auto max-w-[1600px] space-y-6 px-4 py-6 sm:px-6">
         {importError && (
           <div className="rounded-lg border border-danger-500/50 bg-danger-500/10 px-4 py-2.5 text-sm text-danger-400">
             {importError}
@@ -82,17 +90,35 @@ export default function App() {
           </section>
 
           <section>
-            <Ledger result={result} decimals={decimals} direction={direction} currencySymbol={currencySymbol} />
+            <Ledger
+              result={result}
+              decimals={decimals}
+              direction={direction}
+              currencySymbol={currencySymbol}
+              erpMode={erpMode}
+            />
 
             <div className="mt-4 rounded-xl border border-ink-700 bg-ink-800/40 p-4 text-xs leading-relaxed text-ink-400">
               <p className="font-medium text-ink-200">How to read this for ERP configuration</p>
               <p className="mt-1">
-                <span className="text-ink-200">Stated Rate</span> is what the client told you.{" "}
-                <span className="text-ink-200">Effective Rate on Net</span> is what that tax actually
-                works out to once earlier taxes are folded into its base — that's the number that
-                explains why, say, a 2.5% SSCL calculated on top of Service Charge lands closer to
-                2.75-2.8% of the room rate. Configure each tax in your ERP against whichever base column
-                matches its "Applies on" selection here, in the order shown.
+                {erpMode ? (
+                  <>
+                    <span className="text-ink-200">ERP flat-rate mode</span> is on: each exclusive tax's
+                    effective rate was rounded to {decimals} decimal{decimals === 1 ? "" : "s"} of a
+                    percent first, then applied as an independent flat rate — exactly like a tax engine
+                    that can't natively cascade tax-on-tax. This is the number that will match your
+                    actual ERP/Excel output, small rounding drift and all.
+                  </>
+                ) : (
+                  <>
+                    <span className="text-ink-200">Stated Rate</span> is what the client told you.{" "}
+                    <span className="text-ink-200">Effective Rate on Net</span> is what that tax
+                    actually works out to once earlier taxes are folded into its base — that's the
+                    number that explains why, say, a 2.5% SSCL calculated on top of Service Charge
+                    lands closer to 2.75-2.8% of the room rate. Configure each tax in your ERP against
+                    whichever base column matches its "Applies on" selection here, in the order shown.
+                  </>
+                )}
               </p>
             </div>
           </section>
