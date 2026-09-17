@@ -48,20 +48,29 @@ export default function App() {
         onDecimalsChange={setDecimals}
         currencySymbol={currencySymbol}
         onCurrencyChange={setCurrencySymbol}
-        onExportCSV={() => downloadBlob(new Blob([toCSV(taxes)], { type: "text/csv" }), "tax-structure.csv")}
-        onExportXLSX={() => toXLSXBlob(taxes).then((blob) => downloadBlob(blob, "tax-structure.xlsx"))}
+        onExportCSV={() =>
+          downloadBlob(
+            new Blob([toCSV(taxes, { result, direction, decimals, currencySymbol })], { type: "text/csv" }),
+            "tax-structure.csv"
+          )
+        }
+        onExportXLSX={() =>
+          toXLSXBlob(taxes, { result, direction, decimals, currencySymbol }).then((blob) =>
+            downloadBlob(blob, "tax-structure.xlsx")
+          )
+        }
         onImportFile={handleImportFile}
         onLoadSample={() => setTaxes(sampleTaxes())}
       />
 
-      <main className="mx-auto max-w-[1600px] space-y-6 px-4 py-6 sm:px-6 p-3">
+      <main className="mx-auto max-w-[1600px]  space-y-6 px-4 py-6 sm:px-6">
         {importError && (
           <div className="rounded-lg border border-danger-500/50 bg-danger-500/10 px-4 py-2.5 text-sm text-danger-400">
             {importError}
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.4fr)]">
           <section>
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-ink-100">Tax Configuration</h2>
@@ -89,7 +98,8 @@ export default function App() {
           </section>
         </div>
       </main>
-     <footer className="mx-auto max-w-full space-y-1 px-4 pb-8 pt-2 p-3 text-center text-xs text-ink-600 sm:px-6">
+
+      <footer className="mx-auto max-w-full space-y-1 px-4 pb-8 pt-2 p-3 text-center text-xs text-ink-600 sm:px-6">
         <p>
           Runs entirely in your browser - nothing is saved or sent anywhere. Export a CSV/XLSX per client
           to keep a record.
@@ -109,4 +119,3 @@ export default function App() {
     </div>
   );
 }
- 

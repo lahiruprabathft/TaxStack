@@ -1,8 +1,19 @@
 import Papa from "papaparse";
-import type { TaxMode, TaxType } from "../types";
-import { makeTaxId } from "../calc";
+import type { CalculationResult, Direction, TaxMode, TaxType } from "../types";
+import { formatAmount, makeTaxId } from "../calc";
 
 const COLUMNS = ["Order", "Tax Name", "Rate (%)", "Mode", "Applies On Base", "Applies On Taxes"] as const;
+
+const LEDGER_COLUMNS = [
+  "Order",
+  "Tax Name",
+  "Mode",
+  "Stated Rate (%)",
+  "Base Amount",
+  "Tax Amount",
+  "Effective Rate on Net (%)",
+  "Running Total",
+] as const;
 
 interface Row {
   Order: string | number;
@@ -11,6 +22,14 @@ interface Row {
   Mode: string;
   "Applies On Base": string;
   "Applies On Taxes": string;
+}
+
+/** Optional calculation context to include alongside the tax structure export. */
+export interface LedgerExportOptions {
+  result: CalculationResult;
+  direction: Direction;
+  decimals: number;
+  currencySymbol: string;
 }
 
 function toRow(tax: TaxType, allTaxes: TaxType[]): Row {
@@ -28,20 +47,84 @@ function toRow(tax: TaxType, allTaxes: TaxType[]): Row {
   };
 }
 
-export function toCSV(taxes: TaxType[]): string {
-  const ordered = [...taxes].sort((a, b) => a.order - b.order);
-  const rows = ordered.map((t) => toRow(t, ordered));
-  return Papa.unparse({ fields: [...COLUMNS], data: rows.map((r) => COLUMNS.map((c) => r[c])) });
+function ledgerRows(opts: LedgerExportOptions): (string | number)[][] {
+  const { result, decimals, currencySymbol } = opts;
+  const fmt = (v: number) => `${currencySymbol}${formatAmount(v, decimals)}`;
+  const rows: (string | number)[][] = [
+    ["", "Net Base", "", "", "", "", "", fmt(result.netBase)],
+    ...result.lines.map((line) => [
+      line.tax.order,
+      line.tax.name,
+      line.tax.mode === "exclusive" ? "Exclusive" : "Inclusive",
+      line.tax.statedRate,
+      fmt(line.baseAmount),
+      fmt(line.taxAmount),
+      line.effectiveRateOnNet,
+      fmt(line.runningTotal),
+    ]),
+  ];
+  rows.push(["", "Total Exclusive Tax Added", "", "", "", fmt(result.totalExclusiveTax), "", ""]);
+  if (result.totalInclusiveTax > 0) {
+    rows.push(["", "Total Inclusive Tax (embedded)", "", "", "", fmt(result.totalInclusiveTax), "", ""]);
+  }
+  rows.push(["", "Final Total", "", "", "", "", "", fmt(result.finalTotal)]);
+  return rows;
 }
 
-export async function toXLSXBlob(taxes: TaxType[]): Promise<Blob> {
+export function toCSV(taxes: TaxType[], ledger?: LedgerExportOptions): string {
+  const ordered = [...taxes].sort((a, b) => a.order - b.order);
+  const rows = ordered.map((t) => toRow(t, ordered));
+  const structureCsv = Papa.unparse({
+    fields: [...COLUMNS],
+    data: rows.map((r) => COLUMNS.map((c) => r[c])),
+  });
+
+  if (!ledger) return structureCsv;
+
+  const contextLine =
+    ledger.direction === "build"
+      ? `Calculation — built up from net base ${ledger.currencySymbol}${formatAmount(
+          ledger.result.netBase,
+          ledger.decimals
+        )}`
+      : `Calculation — extracted from final total ${ledger.currencySymbol}${formatAmount(
+          ledger.result.finalTotal,
+          ledger.decimals
+        )}`;
+
+  const ledgerCsv = Papa.unparse({
+    fields: [...LEDGER_COLUMNS],
+    data: ledgerRows(ledger),
+  });
+
+  return [structureCsv, "", contextLine, ledgerCsv].join("\n");
+}
+
+export async function toXLSXBlob(taxes: TaxType[], ledger?: LedgerExportOptions): Promise<Blob> {
   const XLSX = await import("xlsx");
   const ordered = [...taxes].sort((a, b) => a.order - b.order);
   const rows = ordered.map((t) => toRow(t, ordered));
-  const worksheet = XLSX.utils.json_to_sheet(rows, { header: [...COLUMNS] });
-  worksheet["!cols"] = [{ wch: 8 }, { wch: 26 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 36 }];
+  const structureSheet = XLSX.utils.json_to_sheet(rows, { header: [...COLUMNS] });
+  structureSheet["!cols"] = [{ wch: 8 }, { wch: 26 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 36 }];
+
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Tax Structure");
+  XLSX.utils.book_append_sheet(workbook, structureSheet, "Tax Structure");
+
+  if (ledger) {
+    const ledgerSheet = XLSX.utils.aoa_to_sheet([[...LEDGER_COLUMNS], ...ledgerRows(ledger)]);
+    ledgerSheet["!cols"] = [
+      { wch: 8 },
+      { wch: 26 },
+      { wch: 12 },
+      { wch: 14 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 20 },
+      { wch: 16 },
+    ];
+    XLSX.utils.book_append_sheet(workbook, ledgerSheet, "Calculation");
+  }
+
   const out = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
   return new Blob([out], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 }
