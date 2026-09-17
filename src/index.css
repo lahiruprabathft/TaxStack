@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Ledger workspace palette */
+  --color-ink-950: #0d1013;
+  --color-ink-900: #12161b;
+  --color-ink-800: #1b2027;
+  --color-ink-700: #262c34;
+  --color-ink-600: #333b45;
+  --color-ink-500: #4b5561;
+  --color-ink-400: #6b7684;
+  --color-ink-300: #97a1ac;
+  --color-ink-200: #c3cad1;
+  --color-ink-100: #e7e9ec;
+  --color-ink-50: #f4f5f6;
+
+  --color-gold-500: #c9a24b;
+  --color-gold-400: #d8b869;
+  --color-gold-600: #a9843a;
+
+  --color-teal-500: #3e7c78;
+  --color-teal-400: #549591;
+  --color-teal-600: #2f625f;
+
+  --color-danger-500: #c0453c;
+  --color-danger-400: #d16960;
+
+  --color-success-500: #3e8f5c;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--color-ink-900);
+  color: var(--color-ink-100);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Tabular figures everywhere numbers appear */
+.tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+::selection {
+  background-color: var(--color-gold-500);
+  color: var(--color-ink-950);
+}
+
+/* Thin, quiet scrollbars fit the ledger feel */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-ink-600) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--color-ink-600);
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
